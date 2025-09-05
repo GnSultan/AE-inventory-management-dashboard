@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { DashboardLayout, PageHeader } from '@/components/dashboard-layout'
 import { supabaseQueries } from '@/lib/supabase'
-import { formatCurrency, formatNumber, calculateTrend, groupSalesByDate, groupSalesByBrand } from '@/lib/utils'
+import { formatDate, formatNumber, calculateTrend } from '@/lib/utils'
 import { 
-  BarChart3, 
   TrendingUp, 
   TrendingDown, 
   Smartphone, 
@@ -13,26 +13,63 @@ import {
   DollarSign,
   Calendar,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  MoreHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  ShoppingCart
 } from 'lucide-react'
-import type { DashboardStats, SalesChartData, BrandSalesData } from '@/lib/types'
+import type { Sale } from '@/lib/types'
 import { toast } from 'sonner'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip,
+  PieChart, 
+  Pie, 
+  Cell,
+  BarChart, 
+  Bar,
+  Legend
+} from 'recharts'
+
+// Add formatCurrency function if it's not in utils
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('sw-TZ', {
+    style: 'currency',
+    currency: 'TZS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+const ChartTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="glass-card p-2 text-sm">
+        <p className="font-bold">{label}</p>
+        <p className="text-blue-400">{`Sales: ${payload[0].value}`}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+// Lazy load charts for performance
+const LazyLineChart = dynamic(() => Promise.resolve(LineChart), { ssr: false });
+const LazyPieChart = dynamic(() => Promise.resolve(PieChart), { ssr: false });
+const LazyBarChart = dynamic(() => Promise.resolve(BarChart), { ssr: false });
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalDevices: 0,
-    totalGadgets: 0,
-    weeklySales: 0,
-    monthlySales: 0,
-    avgDailySales: 0,
-    avgMonthlySales: 0,
-    weeklyTrend: 0,
-    monthlyTrend: 0,
-  })
-  const [salesData, setSalesData] = useState<SalesChartData[]>([])
-  const [brandData, setBrandData] = useState<BrandSalesData[]>([])
+  const [stats, setStats] = useState<any>({})
+  const [chartData, setChartData] = useState<any>({})
   const [lowStockItems, setLowStockItems] = useState<any[]>([])
+  const [dailySales, setDailySales] = useState<Sale[]>([])
+  const [currentDateOffset, setCurrentDateOffset] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
@@ -40,40 +77,29 @@ export default function DashboardPage() {
     try {
       setIsLoading(true)
       
-      // Load all data concurrently
       const [devices, gadgets, sales, lowStock] = await Promise.all([
         supabaseQueries.getDevices(),
         supabaseQueries.getGadgets(),
-        supabaseQueries.getSalesData(30),
+        supabaseQueries.getSalesData(60), // Fetch 60 days for trend comparison
         supabaseQueries.getLowStockAlerts()
       ])
 
-      // Calculate statistics
       const today = new Date()
-      const weekAgo = new Date(today)
-      weekAgo.setDate(today.getDate() - 7)
-      const monthAgo = new Date(today)
-      monthAgo.setDate(today.getDate() - 30)
-      const prevWeekStart = new Date(weekAgo)
-      prevWeekStart.setDate(weekAgo.getDate() - 7)
-      const prevMonthStart = new Date(monthAgo)
-      prevMonthStart.setDate(monthAgo.getDate() - 30)
+      const todayStart = new Date(today.setHours(0, 0, 0, 0))
 
-      const weeklySales = sales.filter(s => new Date(s.date_sold) >= weekAgo).length
-      const monthlySales = sales.filter(s => new Date(s.date_sold) >= monthAgo).length
-      const prevWeeklySales = sales.filter(s => {
-        const date = new Date(s.date_sold)
-        return date >= prevWeekStart && date < weekAgo
-      }).length
-      const prevMonthlySales = sales.filter(s => {
-        const date = new Date(s.date_sold)
-        return date >= prevMonthStart && date < monthAgo
-      }).length
+      const weekAgo = new Date(new Date().setDate(today.getDate() - 7))
+      const monthAgo = new Date(new Date().setDate(today.getDate() - 30))
+      const prevWeekStart = new Date(new Date().setDate(today.getDate() - 14))
+      const prevMonthStart = new Date(new Date().setDate(today.getDate() - 60))
+
+      const weeklySalesCount = sales.filter(s => new Date(s.date_sold) >= weekAgo).length
+      const monthlySalesCount = sales.filter(s => new Date(s.date_sold) >= monthAgo).length
+      const prevWeeklySalesCount = sales.filter(s => new Date(s.date_sold) >= prevWeekStart && new Date(s.date_sold) < weekAgo).length
+      const prevMonthlySalesCount = sales.filter(s => new Date(s.date_sold) >= prevMonthStart && new Date(s.date_sold) < monthAgo).length
 
       const totalDevices = devices.filter(d => d.status === 'available').length
       const totalGadgets = gadgets.reduce((sum, g) => sum + g.quantity, 0)
 
-      // Calculate monthly averages
       const salesByMonth = sales.reduce((acc: Record<string, number>, sale) => {
         const monthKey = new Date(sale.date_sold).toISOString().substring(0, 7)
         acc[monthKey] = (acc[monthKey] || 0) + 1
@@ -88,40 +114,47 @@ export default function DashboardPage() {
       setStats({
         totalDevices,
         totalGadgets,
-        weeklySales,
-        monthlySales,
-        avgDailySales: monthlySales / 30,
+        weeklySales: weeklySalesCount,
+        monthlySales: monthlySalesCount,
+        avgDailySales: monthlySalesCount / 30,
         avgMonthlySales,
-        weeklyTrend: calculateTrend(weeklySales, prevWeeklySales),
-        monthlyTrend: calculateTrend(monthlySales, prevMonthlySales),
+        weeklyTrend: calculateTrend(weeklySalesCount, prevWeeklySalesCount),
+        monthlyTrend: calculateTrend(monthlySalesCount, prevMonthlySalesCount),
       })
+      
+      // -- Chart Data Processing --
+      const salesLast30Days = sales.filter(s => new Date(s.date_sold) >= monthAgo)
 
-      // Process chart data
-      const dailySales = groupSalesByDate(sales)
-      const chartData: SalesChartData[] = Object.entries(dailySales)
-        .map(([date, data]) => ({
-          date,
-          sales: data.sales,
-          revenue: data.revenue
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-14) // Last 14 days
+      // Sales trend (line chart)
+      const salesByDay = salesLast30Days.reduce((acc, sale) => {
+        const date = formatDate(sale.date_sold, 'MMM dd')
+        acc[date] = (acc[date] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      
+      const salesTrendData = Object.entries(salesByDay).map(([date, sales]) => ({ date, sales })).reverse()
 
-      setSalesData(chartData)
+      // Sales by brand (doughnut chart)
+      const brandSales = salesLast30Days.reduce((acc, sale) => {
+        const brand = sale.item_description.split(' ')[0] || 'Unknown'
+        acc[brand] = (acc[brand] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
 
-      // Process brand data
-      const brandSales = groupSalesByBrand(sales)
-      const brandChartData: BrandSalesData[] = Object.entries(brandSales)
-        .map(([brand, data]) => ({
-          brand,
-          sales: data.sales,
-          revenue: data.revenue
-        }))
-        .sort((a, b) => b.sales - a.sales)
-        .slice(0, 6)
+      const brandData = Object.entries(brandSales).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5)
 
-      setBrandData(brandChartData)
+      // Weekly performance (bar chart)
+      const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const weeklyPerformance = Array(7).fill(0)
+      salesLast30Days.forEach(sale => {
+        const dayIndex = new Date(sale.date_sold).getUTCDay()
+        weeklyPerformance[dayIndex]++
+      })
+      const weeklyPerformanceData = weeklyPerformance.map((sales, i) => ({ name: daysOfWeek[i], sales }))
+
+      setChartData({ salesTrendData, brandData, weeklyPerformanceData })
       setLowStockItems(lowStock)
+      setDailySales(sales)
       setLastUpdated(new Date())
 
     } catch (error) {
@@ -134,29 +167,42 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboardData()
-    
-    // Refresh every 5 minutes
-    const interval = setInterval(loadDashboardData, 5 * 60 * 1000)
-    return () => clearInterval(interval)
   }, [])
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d']
+  const { todaySales, yesterdaySales } = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    
+    let targetDate = new Date()
+    targetDate.setDate(targetDate.getDate() + currentDateOffset)
+    targetDate.setHours(0,0,0,0)
+    
+    const filtered = dailySales.filter(s => {
+      const saleDate = new Date(s.date_sold)
+      saleDate.setHours(0,0,0,0)
+      return saleDate.getTime() === targetDate.getTime()
+    })
+    return { todaySales: filtered, yesterdaySales: [] }
+  }, [dailySales, currentDateOffset])
+
+  const getDateDisplayLabel = () => {
+    if (currentDateOffset === 0) return 'Today'
+    if (currentDateOffset === -1) return 'Yesterday'
+    const targetDate = new Date()
+    targetDate.setDate(targetDate.getDate() + currentDateOffset)
+    return formatDate(targetDate, 'EEE, MMM dd')
+  }
 
   if (isLoading) {
     return (
-      <DashboardLayout
-        header={
-          <PageHeader 
-            title="Dashboard" 
-            description="Real-time insights and analytics for your inventory"
-          />
-        }
-      >
+      <DashboardLayout>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="glass-card animate-pulse">
-              <div className="h-4 bg-white/20 rounded mb-3"></div>
-              <div className="h-8 bg-white/20 rounded mb-2"></div>
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="glass-card animate-pulse h-24">
+              <div className="h-4 bg-white/20 rounded mb-3 w-3/4"></div>
+              <div className="h-8 bg-white/20 rounded mb-2 w-1/2"></div>
               <div className="h-3 bg-white/20 rounded w-2/3"></div>
             </div>
           ))}
@@ -166,208 +212,135 @@ export default function DashboardPage() {
   }
 
   return (
-    <DashboardLayout
-      header={
-        <PageHeader 
-          title="Dashboard" 
-          description="Real-time insights and analytics for your inventory"
-          actions={
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">
-                Last updated: {lastUpdated.toLocaleTimeString()}
-              </span>
-              <button
-                onClick={loadDashboardData}
-                className="btn-secondary p-2"
-                title="Refresh data"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </button>
-            </div>
-          }
-        />
-      }
-    >
+    <DashboardLayout>
+      <PageHeader 
+        title="Dashboard" 
+        description={`Real-time insights for ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`}
+      />
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <KPICard
-          title="Total Devices"
-          value={stats.totalDevices}
-          icon={<Smartphone className="h-5 w-5" />}
-          subtitle="Available in stock"
-          gradient="gradient-primary"
-        />
-        
-        <KPICard
-          title="Total Gadgets"
-          value={stats.totalGadgets}
-          icon={<Package className="h-5 w-5" />}
-          subtitle="Items in stock"
-          gradient="gradient-success"
-        />
-        
-        <KPICard
-          title="Weekly Sales"
-          value={stats.weeklySales}
-          icon={<Calendar className="h-5 w-5" />}
-          subtitle="Past 7 days"
-          trend={stats.weeklyTrend}
-          gradient="gradient-warning"
-        />
-        
-        <KPICard
-          title="Monthly Sales"
-          value={stats.monthlySales}
-          icon={<DollarSign className="h-5 w-5" />}
-          subtitle="Past 30 days"
-          trend={stats.monthlyTrend}
-          gradient="gradient-danger"
-        />
+        <KPICard title="Total Devices" value={formatNumber(stats.totalDevices)} icon={Smartphone} />
+        <KPICard title="Total Gadgets" value={formatNumber(stats.totalGadgets)} icon={Package} />
+        <KPICard title="Weekly Sales" value={formatNumber(stats.weeklySales)} icon={ShoppingCart} trend={stats.weeklyTrend} />
+        <KPICard title="Monthly Sales" value={formatNumber(stats.monthlySales)} icon={Calendar} trend={stats.monthlyTrend} />
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Sales Trend Chart */}
-        <div className="glass-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Sales Trend (14 Days)
-            </h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Main Charts - takes 2/3 width */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="glass-card">
+            <h3 className="text-lg font-semibold mb-4">Sales Velocity & Trends (Last 30 Days)</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LazyLineChart data={chartData.salesTrendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.2)" />
+                  <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(var(--accent-rgb), 0.1)' }}/>
+                  <Line type="monotone" dataKey="sales" stroke="var(--accent-color)" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
+                </LazyLineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={salesData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="rgba(255,255,255,0.6)"
-                  fontSize={12}
-                />
-                <YAxis stroke="rgba(255,255,255,0.6)" fontSize={12} />
-                <Line 
-                  type="monotone" 
-                  dataKey="sales" 
-                  stroke="#0088FE" 
-                  strokeWidth={2}
-                  dot={{ fill: '#0088FE', strokeWidth: 2, r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="glass-card">
+              <h3 className="text-lg font-semibold mb-4">Sales by Brand</h3>
+              <div className="h-60">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <LazyPieChart>
+                      <Pie data={chartData.brandData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
+                        {chartData.brandData?.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={`hsl(var(--primary) / ${1 - index * 0.15})`} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </LazyPieChart>
+                  </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="glass-card">
+              <h3 className="text-lg font-semibold mb-4">Weekly Performance</h3>
+              <div className="h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LazyBarChart data={chartData.weeklyPerformanceData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" />
+                    <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(var(--accent-rgb), 0.1)' }}/>
+                    <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </LazyBarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Brand Sales Chart */}
-        <div className="glass-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Sales by Brand</h3>
+        {/* Side Column - takes 1/3 width */}
+        <div className="space-y-6">
+          <div className="glass-card">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Daily Sales Explorer</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setCurrentDateOffset(prev => prev - 1)} className="btn-secondary p-1.5"><ChevronLeft className="h-4 w-4"/></button>
+                <span className="text-sm font-medium w-24 text-center">{getDateDisplayLabel()}</span>
+                <button onClick={() => setCurrentDateOffset(prev => prev + 1)} disabled={currentDateOffset >= 0} className="btn-secondary p-1.5 disabled:opacity-50"><ChevronRight className="h-4 w-4"/></button>
+              </div>
+            </div>
+            <div className="space-y-3 h-64 overflow-y-auto pr-2">
+              {todaySales.length > 0 ? todaySales.map(sale => (
+                <div key={sale.id} className="text-sm flex justify-between items-center">
+                  <div>
+                    <p className="font-medium">{sale.item_description}</p>
+                    <p className="text-muted-foreground text-xs">{sale.customer_name}</p>
+                  </div>
+                  <p className="font-bold">{formatCurrency(Number(sale.sale_price))}</p>
+                </div>
+              )) : (
+                <div className="text-center text-muted-foreground pt-16">No sales for this day.</div>
+              )}
+            </div>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={brandData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ brand, sales }) => `${brand}: ${sales}`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="sales"
-                >
-                  {brandData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
 
-      {/* Low Stock Alerts */}
-      <div className="glass-card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
-            Stock Alerts ({lowStockItems.length})
-          </h3>
-        </div>
-        
-        {lowStockItems.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Brand</th>
-                  <th>Model</th>
-                  <th>Stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lowStockItems.map((item, index) => (
-                  <tr key={index}>
-                    <td>
-                      <span className="badge-info capitalize">{item.type}</span>
-                    </td>
-                    <td className="font-medium">{item.brand}</td>
-                    <td>{item.model}</td>
-                    <td>
-                      <span className={`font-bold ${item.stock_count <= 1 ? 'text-red-500' : 'text-yellow-500'}`}>
-                        {item.stock_count}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="glass-card">
+            <h3 className="text-lg font-semibold mb-4">Stock Alerts</h3>
+            <div className="space-y-3 h-64 overflow-y-auto pr-2">
+              {lowStockItems.length > 0 ? lowStockItems.map((item: any) => (
+                <div key={`${item.type}-${item.brand}-${item.model}`} className="text-sm flex justify-between items-center">
+                   <div>
+                    <p className="font-medium">{item.brand} {item.model}</p>
+                    <p className="text-muted-foreground text-xs capitalize">{item.type}</p>
+                  </div>
+                  <span className={`font-bold text-sm ${item.stock_count <= 2 ? 'text-red-500' : 'text-yellow-500'}`}>
+                    {item.stock_count} left
+                  </span>
+                </div>
+              )) : (
+                 <div className="text-center text-muted-foreground pt-16">Inventory levels are healthy!</div>
+              )}
+            </div>
           </div>
-        ) : (
-          <p className="text-muted-foreground text-center py-8">
-            No low stock items found. All inventory levels are healthy!
-          </p>
-        )}
+        </div>
       </div>
     </DashboardLayout>
   )
 }
 
-interface KPICardProps {
-  title: string
-  value: number
-  icon: React.ReactNode
-  subtitle: string
-  trend?: number
-  gradient: string
-}
-
-function KPICard({ title, value, icon, subtitle, trend, gradient }: KPICardProps) {
+function KPICard({ title, value, icon: Icon, trend }: { title: string, value: string | number, icon: React.ElementType, trend?: number }) {
   return (
     <div className="glass-card">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-          {title}
-        </h3>
-        <div className={`${gradient} p-2 rounded-lg text-white`}>
-          {icon}
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase">{title}</h3>
+        <Icon className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <p className="text-3xl font-bold">{value}</p>
+      {trend !== undefined && (
+        <div className={`flex items-center gap-1 text-sm mt-1 ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+          {trend >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+          {Math.abs(trend).toFixed(0)}% vs prev period
         </div>
-      </div>
-      
-      <div className="text-2xl font-bold mb-2">
-        {formatNumber(value)}
-      </div>
-      
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{subtitle}</span>
-        {trend !== undefined && (
-          <div className={`flex items-center gap-1 text-sm ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            {trend >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {Math.abs(trend).toFixed(0)}%
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }

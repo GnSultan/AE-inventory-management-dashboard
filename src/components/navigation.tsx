@@ -19,8 +19,8 @@ import {
   X,
   ChevronDown
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import type { NavItem } from '@/lib/types'
+import { cn } from '../lib/utils'
+import type { NavItem } from '../lib/types'
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' },
@@ -85,7 +85,7 @@ export function Navigation() {
           {/* Logo */}
           <div className="mb-8">
             <Link href="/dashboard" className="flex items-center space-x-3">
-              <div className="gradient-primary p-2 rounded-lg">
+              <div className="bg-accent p-2 rounded-lg">
                 <LayoutDashboard className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -109,7 +109,7 @@ export function Navigation() {
                   className={cn(
                     'flex items-center space-x-3 px-3 py-2 rounded-lg transition-all duration-200',
                     'hover:bg-white/10 dark:hover:bg-black/10',
-                    isActive && 'bg-white/20 dark:bg-black/20 border-l-4 border-blue-500'
+                    isActive && 'bg-accent/80 text-white border-l-4 border-accent'
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -189,20 +189,6 @@ export function Navigation() {
 }
 
 export function MobileHeader() {
-  const pathname = usePathname()
-  
-  // Extract current page title from pathname
-  const getPageTitle = (path: string) => {
-    const segment = path.split('/')[1] || 'dashboard'
-    return segment.charAt(0).toUpperCase() + segment.slice(1)
-  }
+// ... existing code ...
 
-  return (
-    <header className="md:hidden fixed top-0 left-0 right-0 z-30 glass border-b border-white/10">
-      <div className="flex items-center justify-between p-4 pl-16">
-        <h1 className="text-lg font-semibold">{getPageTitle(pathname)}</h1>
-        <div className="w-8" /> {/* Spacer for balance */}
-      </div>
-    </header>
-  )
-}
+

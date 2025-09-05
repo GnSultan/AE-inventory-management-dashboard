@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { supabaseQueries } from '@/lib/supabase'
-import { validateIMEI, validateSerialNumber } from '@/lib/utils'
+import { supabaseQueries } from '../../lib/supabase'
+import { validateIMEI, validateSerialNumber } from '../../lib/utils'
 import { X, Plus, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { AddDeviceForm, AddGadgetForm, Supplier } from '@/lib/types'
+import type { AddDeviceForm, AddGadgetForm, Supplier } from '../../lib/types'
 
 interface AddDeviceModalProps {
   isOpen: boolean
@@ -22,7 +22,7 @@ export function AddDeviceModal({ isOpen, onClose, onSuccess }: AddDeviceModalPro
     color: '',
     warranty_plan: '1_year',
     source: '',
-    purchase_price: undefined
+    supplier_id: undefined,
   })
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -40,7 +40,7 @@ export function AddDeviceModal({ isOpen, onClose, onSuccess }: AddDeviceModalPro
         color: '',
         warranty_plan: '1_year',
         source: '',
-        purchase_price: undefined
+        supplier_id: undefined,
       })
       setErrors({})
     }
@@ -52,6 +52,18 @@ export function AddDeviceModal({ isOpen, onClose, onSuccess }: AddDeviceModalPro
       setSuppliers(data)
     } catch (error) {
       console.error('Error loading suppliers:', error)
+    }
+  }
+
+  const handleSourceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    if (value === 'Trade-in') {
+      setFormData(prev => ({ ...prev, source: 'Trade-in', supplier_id: undefined }));
+    } else if (value === '') {
+       setFormData(prev => ({ ...prev, source: '', supplier_id: undefined }));
+    } else {
+      const selectedSupplier = suppliers.find(s => s.id === value);
+      setFormData(prev => ({ ...prev, source: selectedSupplier?.name, supplier_id: value }));
     }
   }
 
@@ -79,10 +91,6 @@ export function AddDeviceModal({ isOpen, onClose, onSuccess }: AddDeviceModalPro
       newErrors.model = 'Model is required'
     }
 
-    if (formData.purchase_price && formData.purchase_price <= 0) {
-      newErrors.purchase_price = 'Purchase price must be greater than 0'
-    }
-
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -95,14 +103,7 @@ export function AddDeviceModal({ isOpen, onClose, onSuccess }: AddDeviceModalPro
     setIsSubmitting(true)
 
     try {
-      const deviceData = {
-        ...formData,
-        supplier_id: formData.source && formData.source !== 'Trade-in' 
-          ? suppliers.find(s => s.name === formData.source)?.id 
-          : undefined
-      }
-
-      await supabaseQueries.addDevice(deviceData)
+      await supabaseQueries.addDevice(formData)
       toast.success('Device added successfully')
       onSuccess()
     } catch (error) {
@@ -211,37 +212,18 @@ export function AddDeviceModal({ isOpen, onClose, onSuccess }: AddDeviceModalPro
           <div>
             <label className="block text-sm font-medium mb-2">Source</label>
             <select
-              value={formData.source}
-              onChange={(e) => setFormData(prev => ({ ...prev, source: e.target.value }))}
+              value={formData.supplier_id || (formData.source === 'Trade-in' ? 'Trade-in' : '')}
+              onChange={handleSourceChange}
               className="w-full input"
             >
               <option value="">Select source...</option>
               <option value="Trade-in">Trade-in</option>
               {suppliers.map(supplier => (
-                <option key={supplier.id} value={supplier.name}>
+                <option key={supplier.id} value={supplier.id}>
                   {supplier.name}
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Purchase Price (TZS)</label>
-            <input
-              type="number"
-              value={formData.purchase_price || ''}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
-                purchase_price: e.target.value ? parseFloat(e.target.value) : undefined 
-              }))}
-              className={`w-full input ${errors.purchase_price ? 'border-red-500' : ''}`}
-              placeholder="0"
-              min="0"
-              step="1000"
-            />
-            {errors.purchase_price && (
-              <p className="text-red-500 text-sm mt-1">{errors.purchase_price}</p>
-            )}
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -288,7 +270,6 @@ export function AddGadgetModal({ isOpen, onClose, onSuccess }: AddGadgetModalPro
     brand: '',
     model: '',
     quantity: 1,
-    purchase_price: undefined
   })
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -302,7 +283,7 @@ export function AddGadgetModal({ isOpen, onClose, onSuccess }: AddGadgetModalPro
         brand: '',
         model: '',
         quantity: 1,
-        purchase_price: undefined
+        supplier_id: undefined
       })
       setErrors({})
     }
@@ -330,10 +311,6 @@ export function AddGadgetModal({ isOpen, onClose, onSuccess }: AddGadgetModalPro
 
     if (!formData.quantity || formData.quantity < 1) {
       newErrors.quantity = 'Quantity must be at least 1'
-    }
-
-    if (formData.purchase_price && formData.purchase_price <= 0) {
-      newErrors.purchase_price = 'Purchase price must be greater than 0'
     }
 
     setErrors(newErrors)
@@ -434,25 +411,6 @@ export function AddGadgetModal({ isOpen, onClose, onSuccess }: AddGadgetModalPro
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Purchase Price (TZS)</label>
-            <input
-              type="number"
-              value={formData.purchase_price || ''}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
-                purchase_price: e.target.value ? parseFloat(e.target.value) : undefined 
-              }))}
-              className={`w-full input ${errors.purchase_price ? 'border-red-500' : ''}`}
-              placeholder="0"
-              min="0"
-              step="1000"
-            />
-            {errors.purchase_price && (
-              <p className="text-red-500 text-sm mt-1">{errors.purchase_price}</p>
-            )}
-          </div>
-
           <div className="flex gap-3 pt-4">
             <button
               type="button"
@@ -485,3 +443,4 @@ export function AddGadgetModal({ isOpen, onClose, onSuccess }: AddGadgetModalPro
     </div>
   )
 }
+

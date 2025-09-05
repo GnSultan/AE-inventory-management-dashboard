@@ -331,7 +331,7 @@ function CreateLoanModal({ onClose, onSuccess }: CreateLoanModalProps) {
     setIsSubmitting(true)
 
     try {
-      const supabase = supabaseQueries.createClient()
+      const supabase = createClient()
       
       const loanData = {
         loaner_name: loanerName,
@@ -582,7 +582,7 @@ function ProcessReturnModal({ loan, onClose, onSuccess }: ProcessReturnModalProp
     setIsSubmitting(true)
 
     try {
-      const supabase = supabaseQueries.createClient()
+      const supabase = createClient()
 
       if (action === 'return') {
         // Mark loan as returned

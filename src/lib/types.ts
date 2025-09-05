@@ -27,6 +27,163 @@ export interface Database {
         }
         Update: {
           id?: string
+          name?: string
+          contact_info?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      devices: {
+        Row: {
+          id: string
+          imei_serial: string
+          brand: string
+          model: string
+          capacity: string | null
+          color: string | null
+          warranty_plan: 'six_months' | 'one_year' | 'two_years'
+          source: string | null
+          supplier_id: string | null
+          status: 'available' | 'loaned' | 'sold' | 'trade_in'
+          date_added: string
+          date_sold: string | null
+          date_loaned: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          imei_serial: string
+          brand: string
+          model: string
+          capacity?: string | null
+          color?: string | null
+          warranty_plan?: 'six_months' | 'one_year' | 'two_years'
+          source?: string | null
+          supplier_id?: string | null
+          status?: 'available' | 'loaned' | 'sold' | 'trade_in'
+          date_added?: string
+          date_sold?: string | null
+          date_loaned?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          imei_serial?: string
+          brand?: string
+          model?: string
+          capacity?: string | null
+          color?: string | null
+          warranty_plan?: 'six_months' | 'one_year' | 'two_years'
+          source?: string | null
+          supplier_id?: string | null
+          status?: 'available' | 'loaned' | 'sold' | 'trade_in'
+          date_added?: string
+          date_sold?: string | null
+          date_loaned?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      gadgets: {
+        Row: {
+          id: string
+          inventory_id: string
+          brand: string
+          model: string
+          quantity: number
+          supplier_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          inventory_id?: string
+          brand: string
+          model: string
+          quantity?: number
+          supplier_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          inventory_id?: string
+          brand?: string
+          model?: string
+          quantity?: number
+          supplier_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      customers: {
+        Row: {
+          id: string
+          name: string
+          phone: string | null
+          email: string | null
+          address: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          phone?: string | null
+          email?: string | null
+          address?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          phone?: string | null
+          email?: string | null
+          address?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      sales: {
+        Row: {
+          id: string
+          sale_id: string
+          customer_id: string | null
+          customer_name: string
+          sale_type: string
+          sale_price: number
+          sale_source: 'inventory' | 'loan' | 'trade_in'
+          device_id: string | null
+          gadget_id: string | null
+          gadget_quantity: number | null
+          item_description: string
+          loan_id: string | null
+          date_sold: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          sale_id?: string
+          customer_id?: string | null
+          customer_name: string
+          sale_type?: string
+          sale_price: number
+          sale_source?: 'inventory' | 'loan' | 'trade_in'
+          device_id?: string | null
+          gadget_id?: string | null
+          gadget_quantity?: number | null
+          item_description: string
+          loan_id?: string | null
+          date_sold?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
           sale_id?: string
           customer_id?: string | null
           customer_name?: string
@@ -206,7 +363,6 @@ export type AddDeviceForm = {
   warranty_plan: '6_months' | '1_year' | '2_years'
   source?: string
   supplier_id?: string
-  purchase_price?: number
 }
 
 export type AddGadgetForm = {
@@ -214,7 +370,6 @@ export type AddGadgetForm = {
   model: string
   quantity: number
   supplier_id?: string
-  purchase_price?: number
 }
 
 export type CreateSaleForm = {
@@ -251,14 +406,18 @@ export type DashboardStats = {
 export type SalesChartData = {
   date: string
   sales: number
-  revenue: number
 }
 
 export type BrandSalesData = {
-  brand: string
-  sales: number
-  revenue: number
+  name: string
+  value: number
 }
+
+export type WeeklyPerformanceData = {
+    name: string;
+    sales: number;
+}
+
 
 // Navigation and UI types
 export type NavItem = {
@@ -271,166 +430,4 @@ export type NavItem = {
 export type Theme = 'light' | 'dark' | 'system'
 
 export type AlertType = 'info' | 'success' | 'warning' | 'error'
-          id?: string
-          name?: string
-          contact_info?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      devices: {
-        Row: {
-          id: string
-          imei_serial: string
-          brand: string
-          model: string
-          capacity: string | null
-          color: string | null
-          warranty_plan: 'six_months' | 'one_year' | 'two_years'
-          source: string | null
-          supplier_id: string | null
-          status: 'available' | 'loaned' | 'sold' | 'trade_in'
-          purchase_price: number | null
-          date_added: string
-          date_sold: string | null
-          date_loaned: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          imei_serial: string
-          brand: string
-          model: string
-          capacity?: string | null
-          color?: string | null
-          warranty_plan?: 'six_months' | 'one_year' | 'two_years'
-          source?: string | null
-          supplier_id?: string | null
-          status?: 'available' | 'loaned' | 'sold' | 'trade_in'
-          purchase_price?: number | null
-          date_added?: string
-          date_sold?: string | null
-          date_loaned?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          imei_serial?: string
-          brand?: string
-          model?: string
-          capacity?: string | null
-          color?: string | null
-          warranty_plan?: 'six_months' | 'one_year' | 'two_years'
-          source?: string | null
-          supplier_id?: string | null
-          status?: 'available' | 'loaned' | 'sold' | 'trade_in'
-          purchase_price?: number | null
-          date_added?: string
-          date_sold?: string | null
-          date_loaned?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      gadgets: {
-        Row: {
-          id: string
-          inventory_id: string
-          brand: string
-          model: string
-          quantity: number
-          supplier_id: string | null
-          purchase_price: number | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          inventory_id?: string
-          brand: string
-          model: string
-          quantity?: number
-          supplier_id?: string | null
-          purchase_price?: number | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          inventory_id?: string
-          brand?: string
-          model?: string
-          quantity?: number
-          supplier_id?: string | null
-          purchase_price?: number | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      customers: {
-        Row: {
-          id: string
-          name: string
-          phone: string | null
-          email: string | null
-          address: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          phone?: string | null
-          email?: string | null
-          address?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          phone?: string | null
-          email?: string | null
-          address?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      sales: {
-        Row: {
-          id: string
-          sale_id: string
-          customer_id: string | null
-          customer_name: string
-          sale_type: string
-          sale_price: number
-          sale_source: 'inventory' | 'loan' | 'trade_in'
-          device_id: string | null
-          gadget_id: string | null
-          gadget_quantity: number | null
-          item_description: string
-          loan_id: string | null
-          date_sold: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          sale_id?: string
-          customer_id?: string | null
-          customer_name: string
-          sale_type?: string
-          sale_price: number
-          sale_source?: 'inventory' | 'loan' | 'trade_in'
-          device_id?: string | null
-          gadget_id?: string | null
-          gadget_quantity?: number | null
-          item_description: string
-          loan_id?: string | null
-          date_sold?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
+

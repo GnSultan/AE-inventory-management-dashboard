@@ -1,6 +1,6 @@
 // src/lib/supabase.ts
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from './types'
+import type { Database, Device, Gadget, Sale, Loan, Warranty, Supplier, LowStockAlert } from './types'
 
 // Client-side Supabase client
 export const createClient = () => createClientComponentClient<Database>()
@@ -15,23 +15,29 @@ export const supabaseQueries = {
       .select('*')
       .order('date_added', { ascending: false })
     
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error getting active inventory:", error)
+        throw new Error(error.message)
+    }
     return data
   },
 
-  async getLowStockAlerts() {
+  async getLowStockAlerts(): Promise<LowStockAlert[]> {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('low_stock_alerts')
       .select('*')
       .order('stock_count', { ascending: true })
     
-    if (error) throw error
-    return data
+    if (error) {
+        console.error("Supabase error getting low stock alerts:", error)
+        throw new Error(error.message)
+    }
+    return data || []
   },
 
   // Device operations
-  async getDevices(status?: 'available' | 'loaned' | 'sold' | 'trade_in') {
+  async getDevices(status?: 'available' | 'loaned' | 'sold' | 'trade_in'): Promise<Device[]> {
     const supabase = createClient()
     let query = supabase
       .from('devices')
@@ -45,8 +51,11 @@ export const supabaseQueries = {
     }
     
     const { data, error } = await query.order('created_at', { ascending: false })
-    if (error) throw error
-    return data
+    if (error) {
+        console.error("Supabase error getting devices:", error)
+        throw new Error(error.message)
+    }
+    return data as Device[] || []
   },
 
   async addDevice(device: {
@@ -58,7 +67,6 @@ export const supabaseQueries = {
     warranty_plan: '6_months' | '1_year' | '2_years'
     source?: string
     supplier_id?: string
-    purchase_price?: number
   }) {
     const supabase = createClient()
     const { data, error } = await supabase
@@ -67,7 +75,11 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+      // FIX: Log the detailed error and throw a standard JS Error
+      console.error('Supabase error adding device:', error)
+      throw new Error(error.message)
+    }
     return data
   },
 
@@ -88,12 +100,15 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error updating device status:", error)
+        throw new Error(error.message)
+    }
     return data
   },
 
   // Gadget operations
-  async getGadgets() {
+  async getGadgets(): Promise<Gadget[]> {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('gadgets')
@@ -103,8 +118,11 @@ export const supabaseQueries = {
       `)
       .order('created_at', { ascending: false })
     
-    if (error) throw error
-    return data
+    if (error) {
+        console.error("Supabase error getting gadgets:", error)
+        throw new Error(error.message)
+    }
+    return data as Gadget[] || []
   },
 
   async addGadget(gadget: {
@@ -112,7 +130,6 @@ export const supabaseQueries = {
     model: string
     quantity: number
     supplier_id?: string
-    purchase_price?: number
   }) {
     const supabase = createClient()
     const { data, error } = await supabase
@@ -121,7 +138,11 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+      // FIX: Log the detailed error and throw a standard JS Error
+      console.error('Supabase error adding gadget:', error)
+      throw new Error(error.message)
+    }
     return data
   },
 
@@ -134,7 +155,10 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error updating gadget quantity:", error)
+        throw new Error(error.message)
+    }
     return data
   },
 
@@ -152,7 +176,6 @@ export const supabaseQueries = {
   }) {
     const supabase = createClient()
     
-    // Generate sale_id
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert([{
@@ -162,23 +185,27 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (saleError) throw saleError
+    if (saleError) {
+        console.error("Supabase error creating sale:", saleError)
+        throw new Error(saleError.message)
+    }
     
-    // Update device/gadget inventory
     if (sale.device_id) {
       await this.updateDeviceStatus(sale.device_id, 'sold')
-      
-      // Auto-generate warranty for device sales (except from loans)
       if (sale.sale_source !== 'loan') {
         await this.createWarranty(saleData.id, sale.device_id, sale.customer_name)
       }
     } else if (sale.gadget_id && sale.gadget_quantity) {
-      // Decrease gadget quantity
-      const { data: gadget } = await supabase
+      const { data: gadget, error: gadgetError } = await supabase
         .from('gadgets')
         .select('quantity')
         .eq('id', sale.gadget_id)
         .single()
+      
+      if (gadgetError) {
+        console.error("Supabase error getting gadget for sale:", gadgetError)
+        throw new Error(gadgetError.message)
+      }
       
       if (gadget) {
         await this.updateGadgetQuantity(sale.gadget_id, gadget.quantity - sale.gadget_quantity)
@@ -192,7 +219,6 @@ export const supabaseQueries = {
   async createWarranty(saleId: string, deviceId: string, customerName: string) {
     const supabase = createClient()
     
-    // Get device details
     const { data: device, error: deviceError } = await supabase
       .from('devices')
       .select('brand, model, capacity, color, warranty_plan')
@@ -201,6 +227,7 @@ export const supabaseQueries = {
     
     if (deviceError || !device) {
       console.error('Error fetching device for warranty:', deviceError)
+      // Don't throw here, just return null as it's a secondary operation
       return null
     }
     
@@ -209,7 +236,7 @@ export const supabaseQueries = {
     const warrantyEndDate = this.calculateWarrantyEndDate(warrantyStartDate, device.warranty_plan)
     
     const warrantyData = {
-      warranty_id: '', // Will be auto-generated by trigger
+      warranty_id: '',
       sale_id: saleId,
       device_id: deviceId,
       customer_name: customerName,
@@ -228,6 +255,7 @@ export const supabaseQueries = {
     
     if (error) {
       console.error('Error creating warranty:', error)
+      // Don't throw here, just return null
       return null
     }
     
@@ -272,7 +300,10 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error creating loan:", error)
+        throw new Error(error.message)
+    }
     return data
   },
 
@@ -287,7 +318,10 @@ export const supabaseQueries = {
     }
     
     const { data, error } = await query.order('created_at', { ascending: false })
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error getting loans:", error)
+        throw new Error(error.message)
+    }
     return data
   },
 
@@ -303,7 +337,10 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error updating loan status:", error)
+        throw new Error(error.message)
+    }
     return data
   },
 
@@ -329,12 +366,15 @@ export const supabaseQueries = {
       `)
       .order('created_at', { ascending: false })
     
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error getting warranties:", error)
+        throw new Error(error.message)
+    }
     return data
   },
 
   // Get sales data for dashboard
-  async getSalesData(days = 30) {
+  async getSalesData(days = 30): Promise<Sale[]> {
     const supabase = createClient()
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
@@ -345,20 +385,26 @@ export const supabaseQueries = {
       .gte('date_sold', startDate.toISOString())
       .order('date_sold', { ascending: false })
     
-    if (error) throw error
-    return data
+    if (error) {
+        console.error("Supabase error getting sales data:", error)
+        throw new Error(error.message)
+    }
+    return data || []
   },
 
   // Supplier operations
-  async getSuppliers() {
+  async getSuppliers(): Promise<Supplier[]> {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('suppliers')
       .select('*')
       .order('name')
     
-    if (error) throw error
-    return data
+    if (error) {
+        console.error("Supabase error getting suppliers:", error)
+        throw new Error(error.message)
+    }
+    return data || []
   },
 
   async addSupplier(supplier: {
@@ -372,40 +418,10 @@ export const supabaseQueries = {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+        console.error("Supabase error adding supplier:", error)
+        throw new Error(error.message)
+    }
     return data
   }
-}
-
-// Real-time subscription helpers
-export const subscribeToInventory = (callback: (payload: any) => void) => {
-  const supabase = createClient()
-  
-  const subscription = supabase
-    .channel('inventory_changes')
-    .on('postgres_changes', 
-      { event: '*', schema: 'public', table: 'devices' }, 
-      callback
-    )
-    .on('postgres_changes', 
-      { event: '*', schema: 'public', table: 'gadgets' }, 
-      callback
-    )
-    .subscribe()
-  
-  return subscription
-}
-
-export const subscribeToSales = (callback: (payload: any) => void) => {
-  const supabase = createClient()
-  
-  const subscription = supabase
-    .channel('sales_changes')
-    .on('postgres_changes', 
-      { event: 'INSERT', schema: 'public', table: 'sales' }, 
-      callback
-    )
-    .subscribe()
-  
-  return subscription
 }
